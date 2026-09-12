@@ -1,0 +1,34 @@
+{
+  "log": { "level": "debug", "timestamp": true },
+  "inbounds": [
+    {
+      "type": "hysteria2",
+      "tag": "singbox-hysteria2",
+      "listen": "127.0.0.1",
+      "listen_port": 10002,
+      "users": [{ "name": "201", "password": "hy2-test-password" }],
+      "obfs": { "type": "salamander", "password": "hy2-test-obfs-password" },
+      "tls": {
+        "enabled": true,
+        "alpn": ["h3"],
+        "certificate_path": "/tmp/hy2-cert.pem",
+        "key_path": "/tmp/hy2-key.pem"
+      }
+    },
+    {
+      "type": "anytls",
+      "tag": "singbox-anytls",
+      "listen": "127.0.0.1",
+      "listen_port": 10003,
+      "users": [{ "name": "202", "password": "anytls-test-password" }],
+      "tls": {
+        "enabled": true,
+        "alpn": ["h2", "http/1.1"],
+        "certificate_path": "/tmp/hy2-cert.pem",
+        "key_path": "/tmp/hy2-key.pem"
+      }
+    }
+  ],
+  "outbounds": [{ "type": "direct", "tag": "direct" }],
+  "route": { "final": "direct" }
+}

@@ -1,0 +1,5 @@
+#!/command/with-contenv sh
+
+exec 2>&1
+exec /usr/local/bin/sing-box run \
+    -c "${SINGBOX_CONFIG_PATH:-/run/remnawave/sing-box.json}"

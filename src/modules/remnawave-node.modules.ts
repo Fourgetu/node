@@ -4,6 +4,8 @@ import { IntegrationsModule } from '@integration-modules/integrations.module';
 
 import { PluginModule } from './_plugin/plugin.module';
 import { AsnLmdbModule } from './asn-lmdb/asn-lmdb.module';
+import { CoreModule } from './core/core.module';
+import { GostModule } from './gost/gost.module';
 import { HandlerModule } from './handler/handler.module';
 import { NetworkStatsModule } from './network-stats/network-stats.module';
 import { StatsModule } from './stats/stats.module';
@@ -13,11 +15,13 @@ import { XrayModule } from './xray-core/xray.module';
     imports: [
         IntegrationsModule,
         AsnLmdbModule,
+        CoreModule,
         NetworkStatsModule,
         PluginModule,
         StatsModule,
         XrayModule,
         HandlerModule,
+        GostModule,
     ],
     providers: [],
 })

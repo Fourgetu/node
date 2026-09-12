@@ -1,0 +1,22 @@
+{
+  "log": { "level": "debug", "timestamp": true },
+  "inbounds": [
+    {
+      "type": "socks",
+      "tag": "client-socks",
+      "listen": "0.0.0.0",
+      "listen_port": 12081
+    }
+  ],
+  "outbounds": [
+    {
+      "type": "anytls",
+      "tag": "anytls-out",
+      "server": "hy2-server",
+      "server_port": 32084,
+      "password": "anytls-test-password",
+      "tls": { "enabled": true, "server_name": "localhost", "insecure": true }
+    }
+  ],
+  "route": { "final": "anytls-out" }
+}

@@ -31,6 +31,11 @@ export namespace AddUsersCommand {
         tag: z.string(),
     });
 
+    const BasePasswordUser = z.object({
+        type: z.enum(['anytls', 'hysteria2', 'socks']),
+        tag: z.string(),
+    });
+
     export const RequestSchema = z.object({
         affectedInboundTags: z.array(z.string()),
         users: z.array(
@@ -42,6 +47,7 @@ export namespace AddUsersCommand {
                         BaseShadowsocksUser,
                         BaseShadowsocks22User,
                         BaseHysteriaUser,
+                        BasePasswordUser,
                     ]),
                 ),
 
@@ -51,6 +57,8 @@ export namespace AddUsersCommand {
                     vlessUuid: z.uuid(),
                     trojanPassword: z.string(),
                     ssPassword: z.string(),
+                    socksUsername: z.string(),
+                    socksPassword: z.string(),
                 }),
             }),
         ),

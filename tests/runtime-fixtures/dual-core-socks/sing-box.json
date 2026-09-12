@@ -1,0 +1,14 @@
+{
+  "log": { "level": "warn" },
+  "inbounds": [
+    {
+      "type": "socks",
+      "tag": "singbox-socks",
+      "listen": "127.0.0.1",
+      "listen_port": 1081,
+      "users": [{ "username": "102", "password": "singbox-test-password" }]
+    }
+  ],
+  "outbounds": [{ "type": "direct", "tag": "direct" }],
+  "route": { "final": "direct" }
+}

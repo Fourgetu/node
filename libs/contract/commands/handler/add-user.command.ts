@@ -53,6 +53,13 @@ export namespace AddUserCommand {
         password: z.string(),
     });
 
+    const BasePasswordUser = z.object({
+        type: z.enum(['anytls', 'hysteria2', 'socks']),
+        tag: z.string(),
+        username: z.string(),
+        password: z.string(),
+    });
+
     export const RequestSchema = z.object({
         data: z.array(
             z.discriminatedUnion('type', [
@@ -61,6 +68,7 @@ export namespace AddUserCommand {
                 BaseShadowsocksUser,
                 BaseShadowsocks22User,
                 BaseHysteriaUser,
+                BasePasswordUser,
             ]),
         ),
         hashData: z.object({

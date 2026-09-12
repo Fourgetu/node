@@ -1,0 +1,2 @@
+*.sh text eol=lf
+docker/rootfs/etc/s6-overlay/** text eol=lf

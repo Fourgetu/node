@@ -1,4 +1,5 @@
 #!/bin/sh
+# This file must keep LF endings because it runs inside the Linux image.
 set -eu
 
 DIR="$(dirname "$0")"

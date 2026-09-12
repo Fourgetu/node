@@ -1,2 +1,3 @@
 #!/command/with-contenv sh
+# This file must keep LF endings because s6 executes it inside Linux.
 exec /command/s6-log -b n0 s10485760 /var/log/xray

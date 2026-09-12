@@ -1,0 +1,40 @@
+{
+  "services": [
+    {
+      "name": "xray-socks-route",
+      "addr": "0.0.0.0:32081",
+      "handler": { "type": "tcp" },
+      "listener": { "type": "tcp" },
+      "forwarder": {
+        "nodes": [{ "name": "xray", "addr": "127.0.0.1:1080" }]
+      }
+    },
+    {
+      "name": "singbox-socks-route",
+      "addr": "0.0.0.0:32082",
+      "handler": { "type": "tcp" },
+      "listener": { "type": "tcp" },
+      "forwarder": {
+        "nodes": [{ "name": "singbox", "addr": "127.0.0.1:1081" }]
+      }
+    },
+    {
+      "name": "xray-socks-other-user-route",
+      "addr": "0.0.0.0:32085",
+      "handler": { "type": "tcp" },
+      "listener": { "type": "tcp" },
+      "forwarder": {
+        "nodes": [{ "name": "xray", "addr": "127.0.0.1:1080" }]
+      }
+    },
+    {
+      "name": "singbox-socks-other-user-route",
+      "addr": "0.0.0.0:32086",
+      "handler": { "type": "tcp" },
+      "listener": { "type": "tcp" },
+      "forwarder": {
+        "nodes": [{ "name": "singbox", "addr": "127.0.0.1:1081" }]
+      }
+    }
+  ]
+}

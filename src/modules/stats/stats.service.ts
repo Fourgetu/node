@@ -9,6 +9,9 @@ import { getSystemStats } from '@common/utils/get-system-stats';
 import { ERRORS } from '@libs/contracts/constants';
 
 import { GetTorrentBlockerReportsCountQuery } from '../_plugin/queries/get-torrent-blocker-reports-count';
+import { CoreStateService } from '../core/core-state.service';
+import { SingBoxStatsService } from '../core/singbox-stats.service';
+import { XrayStatsService } from '../core/xray-stats.service';
 import { GetInterfaceStatsQuery } from '../network-stats/queries/get-interface-stats/get-interface-stats.query';
 import { IGetUserOnlineStatusRequest } from './interfaces';
 import {
@@ -29,6 +32,9 @@ export class StatsService {
     constructor(
         @InjectXtls() private readonly xtlsSdk: XtlsApi,
         private readonly queryBus: QueryBus,
+        private readonly coreState: CoreStateService,
+        private readonly xrayStats: XrayStatsService,
+        private readonly singBoxStats: SingBoxStatsService,
     ) {}
     private readonly logger = new Logger(StatsService.name);
 
@@ -92,35 +98,44 @@ export class StatsService {
     }
 
     public async getUsersStats(reset: boolean): Promise<TResult<GetUsersStatsResponseModel>> {
+        const aggregate = new Map<string, { uplink: number; downlink: number }>();
+        let successfulSources = 0;
+
         try {
-            const response = await this.xtlsSdk.stats.getAllUsersStats(reset);
-
-            if (!response.isOk || !response.data) {
-                this.logger.warn(response);
-
-                return fail(ERRORS.FAILED_TO_GET_USERS_STATS);
+            const snapshot = await this.xrayStats.getSnapshot(reset, ['user>>>']);
+            successfulSources += 1;
+            for (const [username, traffic] of snapshot.users) {
+                this.addUserTraffic(aggregate, username, traffic.uplink, traffic.downlink);
             }
-
-            return ok(
-                new GetUsersStatsResponseModel(
-                    response.data.users.filter((user) => user.uplink !== 0 || user.downlink !== 0),
-                ),
-            );
-
-            // const demoRes = Array.from({ length: 160_000 }, (_, i) => ({
-            //     username: String(i + 1),
-            //     uplink: Math.floor(Math.random() * (107374182400 - 10485760) + 10485760), // Random between 10MB and 100GB
-            //     downlink: Math.floor(Math.random() * (107374182400 - 10485760) + 10485760), // Random between 10MB and 100GB
-            // }));
-
-            // return {
-            //     isOk: true,
-            //     response: new GetUsersStatsResponseModel(demoRes),
-            // };
         } catch (error) {
-            this.logger.error(error);
+            if (this.coreState.getAll().xray.online) {
+                this.logger.warn(`Failed to read Xray user stats: ${error}`);
+            }
+        }
+
+        if (this.coreState.getAll().singbox.online) {
+            try {
+                const snapshot = await this.singBoxStats.getSnapshot(reset, ['user>>>']);
+                successfulSources += 1;
+                for (const [username, traffic] of snapshot.users) {
+                    this.addUserTraffic(aggregate, username, traffic.uplink, traffic.downlink);
+                }
+            } catch (error) {
+                this.logger.warn(`Failed to read sing-box user stats: ${error}`);
+            }
+        }
+
+        if (successfulSources === 0) {
             return fail(ERRORS.FAILED_TO_GET_USERS_STATS);
         }
+
+        return ok(
+            new GetUsersStatsResponseModel(
+                Array.from(aggregate, ([username, traffic]) => ({ username, ...traffic })).filter(
+                    (user) => user.uplink !== 0 || user.downlink !== 0,
+                ),
+            ),
+        );
     }
 
     public async getInboundStats(
@@ -207,23 +222,53 @@ export class StatsService {
     }
 
     public async getCombinedStats(reset: boolean): Promise<TResult<GetCombinedStatsResponseModel>> {
+        const inbounds = new Map<string, { uplink: number; downlink: number }>();
+        const outbounds = new Map<string, { uplink: number; downlink: number }>();
+        let successfulSources = 0;
+
         try {
-            const { isOk: isOkInbounds, data: inboundsData } =
-                await this.xtlsSdk.stats.getAllInboundsStats(reset);
-            const { isOk: isOkOutbounds, data: outboundsData } =
-                await this.xtlsSdk.stats.getAllOutboundsStats(reset);
-
-            if (!isOkInbounds || !inboundsData || !isOkOutbounds || !outboundsData) {
-                return fail(ERRORS.FAILED_TO_GET_COMBINED_STATS);
+            const snapshot = await this.xrayStats.getSnapshot(reset, ['inbound>>>', 'outbound>>>']);
+            successfulSources += 1;
+            for (const [tag, traffic] of snapshot.inbounds) {
+                this.addTraffic(inbounds, tag, traffic.uplink, traffic.downlink);
             }
-
-            return ok(
-                new GetCombinedStatsResponseModel(inboundsData.inbounds, outboundsData.outbounds),
-            );
+            for (const [tag, traffic] of snapshot.outbounds) {
+                this.addTraffic(outbounds, tag, traffic.uplink, traffic.downlink);
+            }
         } catch (error) {
-            this.logger.error(error);
+            if (this.coreState.getAll().xray.online) {
+                this.logger.warn(`Failed to read Xray combined stats: ${error}`);
+            }
+        }
+
+        if (this.coreState.getAll().singbox.online) {
+            try {
+                const snapshot = await this.singBoxStats.getSnapshot(reset, [
+                    'inbound>>>',
+                    'outbound>>>',
+                ]);
+                successfulSources += 1;
+                for (const [tag, traffic] of snapshot.inbounds) {
+                    this.addTraffic(inbounds, tag, traffic.uplink, traffic.downlink);
+                }
+                for (const [tag, traffic] of snapshot.outbounds) {
+                    this.addTraffic(outbounds, tag, traffic.uplink, traffic.downlink);
+                }
+            } catch (error) {
+                this.logger.warn(`Failed to read sing-box combined stats: ${error}`);
+            }
+        }
+
+        if (successfulSources === 0) {
             return fail(ERRORS.FAILED_TO_GET_COMBINED_STATS);
         }
+
+        return ok(
+            new GetCombinedStatsResponseModel(
+                Array.from(inbounds, ([inbound, traffic]) => ({ inbound, ...traffic })),
+                Array.from(outbounds, ([outbound, traffic]) => ({ outbound, ...traffic })),
+            ),
+        );
     }
 
     public async getUserIpList(userId: string): Promise<TResult<GetUserIpListResponseModel>> {
@@ -263,5 +308,29 @@ export class StatsService {
             this.logger.error(error);
             return ok(new GetUsersIpListResponseModel([]));
         }
+    }
+
+    private addUserTraffic(
+        aggregate: Map<string, { uplink: number; downlink: number }>,
+        username: string,
+        uplink: number,
+        downlink: number,
+    ): void {
+        const current = aggregate.get(username) ?? { uplink: 0, downlink: 0 };
+        current.uplink += uplink;
+        current.downlink += downlink;
+        aggregate.set(username, current);
+    }
+
+    private addTraffic(
+        aggregate: Map<string, { uplink: number; downlink: number }>,
+        tag: string,
+        uplink: number,
+        downlink: number,
+    ): void {
+        const current = aggregate.get(tag) ?? { uplink: 0, downlink: 0 };
+        current.uplink += uplink;
+        current.downlink += downlink;
+        aggregate.set(tag, current);
     }
 }

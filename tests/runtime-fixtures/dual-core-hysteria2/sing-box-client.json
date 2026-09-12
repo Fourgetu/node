@@ -1,0 +1,23 @@
+{
+  "log": { "level": "debug", "timestamp": true },
+  "inbounds": [
+    {
+      "type": "socks",
+      "tag": "client-socks",
+      "listen": "0.0.0.0",
+      "listen_port": 12080
+    }
+  ],
+  "outbounds": [
+    {
+      "type": "hysteria2",
+      "tag": "hysteria2-out",
+      "server": "hy2-server",
+      "server_port": 32083,
+      "password": "hy2-test-password",
+      "obfs": { "type": "salamander", "password": "hy2-test-obfs-password" },
+      "tls": { "enabled": true, "server_name": "localhost", "insecure": true }
+    }
+  ],
+  "route": { "final": "hysteria2-out" }
+}

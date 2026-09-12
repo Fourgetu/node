@@ -1,0 +1,22 @@
+{
+  "services": [
+    {
+      "name": "singbox-hysteria2-route",
+      "addr": "0.0.0.0:32083",
+      "handler": { "type": "udp" },
+      "listener": { "type": "udp", "metadata": { "keepAlive": true } },
+      "forwarder": {
+        "nodes": [{ "name": "singbox", "addr": "127.0.0.1:10002" }]
+      }
+    },
+    {
+      "name": "singbox-anytls-route",
+      "addr": "0.0.0.0:32084",
+      "handler": { "type": "tcp" },
+      "listener": { "type": "tcp" },
+      "forwarder": {
+        "nodes": [{ "name": "singbox", "addr": "127.0.0.1:10003" }]
+      }
+    }
+  ]
+}

@@ -11,6 +11,24 @@ export namespace GetNodeHealthCheckCommand {
             xrayInternalStatusCached: z.boolean(),
             xrayVersion: z.string().nullable(),
             nodeVersion: z.string(),
+            cores: z
+                .object({
+                    xray: z.object({
+                        online: z.boolean(),
+                        version: z.string().nullable(),
+                    }),
+                    singbox: z.object({
+                        online: z.boolean(),
+                        version: z.string().nullable(),
+                    }),
+                    gost: z.object({
+                        online: z.boolean(),
+                        version: z.string().nullable(),
+                        installed: z.boolean(),
+                        services: z.number().int().nonnegative(),
+                    }),
+                })
+                .optional(),
         }),
     });
 

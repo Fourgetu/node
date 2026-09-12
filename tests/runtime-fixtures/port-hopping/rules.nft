@@ -1,0 +1,5 @@
+flush table inet remnawave_hopping
+add chain inet remnawave_hopping prerouting { type nat hook prerouting priority dstnat; policy accept; }
+add chain inet remnawave_hopping output { type nat hook output priority dstnat; policy accept; }
+add rule inet remnawave_hopping prerouting udp dport 20000-20019 redirect to :32001 comment "route-test-a"
+add rule inet remnawave_hopping output ip daddr 127.0.0.0/8 udp dport 20000-20019 redirect to :32001 comment "route-test-a"

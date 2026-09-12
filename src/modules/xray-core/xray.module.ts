@@ -1,6 +1,8 @@
 import { Logger, Module, OnModuleDestroy } from '@nestjs/common';
 import { CqrsModule } from '@nestjs/cqrs';
 
+import { CoreModule } from '../core/core.module';
+import { GostModule } from '../gost/gost.module';
 import { InternalModule } from '../internal/internal.module';
 import { COMMANDS } from './commands';
 import { CoreLoaderService } from './core-loader.service';
@@ -10,7 +12,7 @@ import { XrayController } from './xray.controller';
 import { XrayService } from './xray.service';
 
 @Module({
-    imports: [InternalModule, CqrsModule],
+    imports: [InternalModule, CoreModule, GostModule, CqrsModule],
     providers: [XrayService, XrayProcessService, GeodataService, CoreLoaderService, ...COMMANDS],
     controllers: [XrayController],
     exports: [XrayService],

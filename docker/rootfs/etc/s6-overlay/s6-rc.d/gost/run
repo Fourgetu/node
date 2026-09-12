@@ -1,0 +1,13 @@
+#!/command/with-contenv sh
+
+exec 2>&1
+
+CONFIG_PATH="${GOST_CONFIG_PATH:-/var/lib/rnode/gost/config.json}"
+mkdir -p "$(dirname "$CONFIG_PATH")"
+
+if [ ! -f "$CONFIG_PATH" ]; then
+    printf '%s\n' '{"services":[],"limiters":[]}' > "$CONFIG_PATH"
+    chmod 600 "$CONFIG_PATH"
+fi
+
+exec /usr/local/bin/gost -C "$CONFIG_PATH" -R 5s

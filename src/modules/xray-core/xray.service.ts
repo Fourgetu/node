@@ -14,13 +14,17 @@ import { ok, TResult } from '@common/types';
 import { generateApiConfig } from '@common/utils/generate-api-config';
 import { getSystemInfo, getSystemStats } from '@common/utils/get-system-stats';
 import { StartXrayCommand } from '@libs/contracts/commands';
-import { KNOWN_ERRORS } from '@libs/contracts/constants';
+import { CORE_TYPE, KNOWN_ERRORS } from '@libs/contracts/constants';
 
 import { IntegrationsService } from '@integration-modules/integrations.service';
 
 import { ResetPluginsCommand } from '../_plugin/commands/reset-plugins/reset-plugins.command';
 import { RunPreStartCommand } from '../_plugin/commands/run-pre-start/run-pre-start.command';
 import { GetTorrentBlockerStateQuery } from '../_plugin/queries/get-torrent-blocker-state';
+import { CoreStateService } from '../core/core-state.service';
+import { SingBoxService } from '../core/singbox.service';
+import { XrayStatsService } from '../core/xray-stats.service';
+import { GostForwardManager } from '../gost/gost-forward-manager.service';
 import { InternalService } from '../internal/internal.service';
 import { GetInterfaceStatsQuery } from '../network-stats/queries/get-interface-stats/get-interface-stats.query';
 import { CoreLoaderService } from './core-loader.service';
@@ -68,6 +72,10 @@ export class XrayService implements OnApplicationBootstrap {
         private readonly configService: TypedConfigService,
         private readonly queryBus: QueryBus,
         private readonly commandBus: CommandBus,
+        private readonly coreState: CoreStateService,
+        private readonly singBoxService: SingBoxService,
+        private readonly xrayStatsService: XrayStatsService,
+        private readonly gostForwardManager: GostForwardManager,
     ) {
         this.internal = {
             socketPath: this.configService.getOrThrow('INTERNAL_SOCKET_PATH'),
@@ -96,12 +104,17 @@ export class XrayService implements OnApplicationBootstrap {
         }
 
         this.isXrayOnline = false;
+        this.coreState.setOffline(CORE_TYPE.XRAY);
     }
 
     public async startXray(
         body: StartXrayCommand.Request,
         ip: string,
     ): Promise<TResult<StartXrayResponseModel>> {
+        if (body.coreType === CORE_TYPE.SINGBOX) {
+            return this.singBoxService.start(body, ip);
+        }
+
         const interfaceStats = await this.queryBus.execute(new GetInterfaceStatsQuery());
         const tm = performance.now();
         const system = {
@@ -157,6 +170,7 @@ export class XrayService implements OnApplicationBootstrap {
                     shouldRestart = this.internalService.isNeedRestartCore(body.internals.hashes);
                 } else {
                     this.isXrayOnline = false;
+                    this.coreState.setOffline(CORE_TYPE.XRAY);
                     shouldRestart = true;
 
                     this.logger.warn(`Xray Core health check failed, restarting...`);
@@ -197,6 +211,8 @@ export class XrayService implements OnApplicationBootstrap {
             const xrayProcess = await this.restartXrayProcess();
 
             if (xrayProcess.error) {
+                this.isXrayOnline = false;
+                this.coreState.setOffline(CORE_TYPE.XRAY);
                 this.logger.error(`Failed to (re)start Xray process via s6: ${xrayProcess.error}`);
 
                 return ok(
@@ -214,6 +230,7 @@ export class XrayService implements OnApplicationBootstrap {
 
             if (!isStarted) {
                 this.isXrayOnline = false;
+                this.coreState.setOffline(CORE_TYPE.XRAY);
 
                 this.logger.error(`Xray Core v${this.xrayVersion} failed to start.`, {
                     timestamp: new Date().toISOString(),
@@ -239,6 +256,7 @@ export class XrayService implements OnApplicationBootstrap {
             this.isXrayOnline = true;
 
             await this.refreshXrayVersion();
+            this.coreState.setOnline(CORE_TYPE.XRAY, this.xrayVersion);
 
             this.logger.log(`✔ XRay Core v${this.xrayVersion} is up and running.`);
 
@@ -254,6 +272,8 @@ export class XrayService implements OnApplicationBootstrap {
                 ),
             );
         } catch (error) {
+            this.isXrayOnline = false;
+            this.coreState.setOffline(CORE_TYPE.XRAY);
             let errorMessage = null;
             if (error instanceof Error) {
                 errorMessage = error.message;
@@ -302,6 +322,7 @@ export class XrayService implements OnApplicationBootstrap {
             await this.integrations.stop();
 
             this.isXrayOnline = false;
+            this.coreState.setOffline(CORE_TYPE.XRAY);
             this.internalService.cleanup();
 
             return ok(new StopXrayResponseModel(true));
@@ -313,23 +334,48 @@ export class XrayService implements OnApplicationBootstrap {
 
     public async getNodeHealthCheck(): Promise<TResult<GetNodeHealthCheckResponseModel>> {
         try {
+            const gostResult = await this.gostForwardManager.health();
+            const gost = gostResult.isOk
+                ? {
+                      online: gostResult.response.running,
+                      version: gostResult.response.gostVersion,
+                      installed: gostResult.response.installed,
+                      services: gostResult.response.services,
+                  }
+                : { online: false, version: null, installed: false, services: 0 };
+            const cores = { ...this.coreState.getAll(), gost };
             return ok(
                 new GetNodeHealthCheckResponseModel(
                     true,
                     this.isXrayOnline,
                     this.xrayVersion,
                     this.nodeVersion,
+                    cores,
                 ),
             );
         } catch (error) {
             this.logger.error(`Failed to get node health check: ${error}`);
 
-            return ok(new GetNodeHealthCheckResponseModel(false, false, null, this.nodeVersion));
+            const cores = {
+                ...this.coreState.getAll(),
+                gost: { online: false, version: null, installed: false, services: 0 },
+            };
+
+            return ok(
+                new GetNodeHealthCheckResponseModel(false, false, null, this.nodeVersion, cores),
+            );
         }
     }
 
     public async killAllXrayProcesses(): Promise<void> {
         try {
+            if (this.isXrayOnline) {
+                await this.xrayStatsService
+                    .accumulateAndReset()
+                    .catch((error) =>
+                        this.logger.warn(`Failed to snapshot Xray stats before stop: ${error}`),
+                    );
+            }
             await this.xrayProcess.stop();
 
             this.logger.log('s6: Xray process stopped.');
@@ -421,6 +467,13 @@ export class XrayService implements OnApplicationBootstrap {
         error: string | null;
     }> {
         try {
+            if (this.isXrayOnline) {
+                await this.xrayStatsService
+                    .accumulateAndReset()
+                    .catch((error) =>
+                        this.logger.warn(`Failed to snapshot Xray stats before reload: ${error}`),
+                    );
+            }
             await this.xrayProcess.stop();
 
             await this.commandBus.execute(new RunPreStartCommand());

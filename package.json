@@ -28,7 +28,15 @@
     "lint:fix": "oxlint --fix",
     "check": "oxfmt --check && oxlint",
     "fix": "oxfmt && oxlint --fix",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "test:unit": "tsx --test tests/unit/*.test.ts",
+    "test:e2e:dual-core-socks": "node tests/e2e/dual-core-socks.e2e.mjs",
+    "test:e2e:dual-core-hysteria2": "node tests/e2e/dual-core-hysteria2.e2e.mjs",
+    "test:e2e:port-hopping-aggregate": "node tests/e2e/port-hopping-aggregate.e2e.mjs",
+    "test:e2e:hy2-port-hopping": "node tests/e2e/hy2-port-hopping.e2e.mjs",
+    "test:e2e:anytls-limiter": "node tests/e2e/anytls-limiter.e2e.mjs",
+    "test:e2e:socks-limiter": "node tests/e2e/socks-limiter.e2e.mjs",
+    "test:e2e:socks-udp-associate": "node tests/e2e/socks-udp-associate.e2e.mjs"
   },
   "dependencies": {
     "@henrygd/semaphore": "0.1.0",
@@ -88,6 +96,7 @@
     "oxlint": "^1.79.0",
     "run-script-webpack-plugin": "^0.2.3",
     "ts-checker-rspack-plugin": "^1.6.1",
+    "tsx": "^4.23.13",
     "typescript": "~5.9.3",
     "webpack-node-externals": "^3.0.0"
   }

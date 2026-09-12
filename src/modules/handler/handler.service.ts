@@ -16,6 +16,7 @@ import { fail, ok, TResult } from '@common/types';
 import { ERRORS } from '@libs/contracts/constants/errors';
 
 import { DropConnectionsEvent } from '../_plugin/events/drop-connections';
+import { ISingBoxUserMutation, SingBoxService } from '../core/singbox.service';
 import { InternalService } from '../internal/internal.service';
 import {
     AddUserRequestDto,
@@ -36,6 +37,7 @@ export class HandlerService implements OnModuleInit {
         @InjectXtls() private readonly xtlsApi: XtlsApi,
         private readonly internalService: InternalService,
         private readonly eventBus: EventBus,
+        private readonly singBoxService: SingBoxService,
     ) {}
 
     public async onModuleInit(): Promise<void> {
@@ -58,8 +60,19 @@ export class HandlerService implements OnModuleInit {
             const response: Array<ISdkResponse<AddUserResponseModelFromSdk>> = [];
             const userId = requestData[0].username;
             let userIps: string[] | null = null;
+            const singBoxItems = requestData.filter((item) =>
+                this.singBoxService.hasInboundTag(item.tag),
+            );
+            const xrayItems = requestData.filter(
+                (item) => !this.singBoxService.hasInboundTag(item.tag),
+            );
 
-            for (const item of requestData) {
+            await this.singBoxService.upsertUsers(
+                [userId],
+                singBoxItems.map((item) => this.toSingBoxMutation(item)),
+            );
+
+            for (const item of xrayItems) {
                 this.internalService.addXtlsConfigInbound(item.tag);
             }
 
@@ -83,7 +96,7 @@ export class HandlerService implements OnModuleInit {
                 this.eventBus.publish(new DropConnectionsEvent(userIps));
             }
 
-            for (const item of requestData) {
+            for (const item of xrayItems) {
                 let tempRes = null;
 
                 this.logger.debug(`Adding user: ${item.username} with type: ${item.type}`);
@@ -173,7 +186,7 @@ export class HandlerService implements OnModuleInit {
                 }
             }
 
-            if (response.every((res) => !res.isOk)) {
+            if (response.length > 0 && response.every((res) => !res.isOk)) {
                 this.logger.error('Error adding users: ' + JSON.stringify(response, null, 2));
                 return ok(
                     new AddUserResponseModel(
@@ -198,6 +211,8 @@ export class HandlerService implements OnModuleInit {
         try {
             const { username, hashData } = data;
             const response: Array<ISdkResponse<RemoveUserResponseModelFromSdk>> = [];
+
+            await this.singBoxService.removeUsers([username]);
 
             const inboundTags = this.internalService.getXtlsConfigInbounds();
 
@@ -244,7 +259,41 @@ export class HandlerService implements OnModuleInit {
         try {
             const { affectedInboundTags, users } = data;
 
-            for (const tag of affectedInboundTags) {
+            const singBoxMutations: ISingBoxUserMutation[] = [];
+            for (const user of users) {
+                for (const inbound of user.inboundData) {
+                    if (!this.singBoxService.hasInboundTag(inbound.tag)) continue;
+                    singBoxMutations.push(
+                        this.toSingBoxMutation({
+                            ...inbound,
+                            username:
+                                inbound.type === 'socks'
+                                    ? user.userData.socksUsername
+                                    : user.userData.userId,
+                            password:
+                                inbound.type === 'trojan'
+                                    ? user.userData.trojanPassword
+                                    : inbound.type === 'socks'
+                                      ? user.userData.socksPassword
+                                      : inbound.type === 'shadowsocks' ||
+                                          inbound.type === 'shadowsocks22'
+                                        ? user.userData.ssPassword
+                                        : user.userData.vlessUuid,
+                            uuid: user.userData.vlessUuid,
+                        }),
+                    );
+                }
+            }
+
+            await this.singBoxService.upsertUsers(
+                users.flatMap((user) => [user.userData.userId, user.userData.socksUsername]),
+                singBoxMutations,
+            );
+
+            const xrayInboundTags = affectedInboundTags.filter(
+                (tag) => !this.singBoxService.hasInboundTag(tag),
+            );
+            for (const tag of xrayInboundTags) {
                 this.internalService.addXtlsConfigInbound(tag);
             }
 
@@ -260,6 +309,7 @@ export class HandlerService implements OnModuleInit {
                 }
 
                 for (const item of user.inboundData) {
+                    if (this.singBoxService.hasInboundTag(item.tag)) continue;
                     let tempRes = null;
 
                     switch (item.type) {
@@ -368,6 +418,8 @@ export class HandlerService implements OnModuleInit {
         const tm = performance.now();
         try {
             const inboundTags = this.internalService.getXtlsConfigInbounds();
+
+            await this.singBoxService.removeUsers(data.users.map((user) => user.userId));
 
             if (inboundTags.size === 0) {
                 return ok(new RemoveUserResponseModel(true, null));
@@ -491,5 +543,21 @@ export class HandlerService implements OnModuleInit {
             this.logger.error(error);
             return;
         }
+    }
+
+    private toSingBoxMutation(item: {
+        tag: string;
+        username: string;
+        password?: string;
+        uuid?: string;
+        flow?: string;
+    }): ISingBoxUserMutation {
+        return {
+            tag: item.tag,
+            name: item.username,
+            ...('password' in item ? { password: item.password } : {}),
+            ...('uuid' in item ? { uuid: item.uuid } : {}),
+            ...('flow' in item ? { flow: item.flow } : {}),
+        };
     }
 }

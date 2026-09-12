@@ -1,4 +1,5 @@
 #!/command/with-contenv sh
+# This file must keep LF endings because s6 executes it inside Linux.
 
 exec 2>&1
 exec /usr/local/bin/rw-core \
