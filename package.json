@@ -36,7 +36,8 @@
     "test:e2e:hy2-port-hopping": "node tests/e2e/hy2-port-hopping.e2e.mjs",
     "test:e2e:anytls-limiter": "node tests/e2e/anytls-limiter.e2e.mjs",
     "test:e2e:socks-limiter": "node tests/e2e/socks-limiter.e2e.mjs",
-    "test:e2e:socks-udp-associate": "node tests/e2e/socks-udp-associate.e2e.mjs"
+    "test:e2e:socks-udp-associate": "node tests/e2e/socks-udp-associate.e2e.mjs",
+    "test:e2e:gost-reconcile": "node tests/e2e/gost-reconcile.e2e.mjs"
   },
   "dependencies": {
     "@henrygd/semaphore": "0.1.0",

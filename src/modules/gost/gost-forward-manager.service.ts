@@ -3,13 +3,14 @@ import { createSocket } from 'node:dgram';
 import { existsSync } from 'node:fs';
 import { copyFile, mkdir, readdir, readFile, rename, rm, stat, writeFile } from 'node:fs/promises';
 import { createConnection } from 'node:net';
-import { dirname, join } from 'node:path';
+import { basename, dirname, join } from 'node:path';
 import { promisify } from 'node:util';
 
 import { Injectable, Logger, OnApplicationBootstrap, OnModuleDestroy } from '@nestjs/common';
 
 import { ok, TResult } from '@common/types';
 import { GetGostHealthCommand, SyncGostForwardsCommand } from '@libs/contracts/commands';
+
 import { PortHoppingManager } from './port-hopping-manager.service';
 
 const execFileAsync = promisify(execFile);
@@ -49,6 +50,11 @@ interface LimiterSnapshot {
     files: Map<string, string>;
     paths: Set<string>;
 }
+
+export const createGostConfigSiblingPath = (configPath: string, suffix: string): string => {
+    const filename = basename(configPath).replace(/\.json$/i, '');
+    return join(dirname(configPath), `${filename}.${suffix}.json`);
+};
 
 @Injectable()
 export class GostForwardManager implements OnApplicationBootstrap, OnModuleDestroy {
@@ -98,8 +104,11 @@ export class GostForwardManager implements OnApplicationBootstrap, OnModuleDestr
 
             const config = this.buildConfig(request.forwards.filter((forward) => forward.enabled));
             const configText = JSON.stringify(config, null, 2) + '\n';
-            const tempConfigPath = `${this.configPath}.tmp-${process.pid}-${Date.now()}`;
-            const backupConfigPath = `${this.configPath}.known-good`;
+            const tempConfigPath = createGostConfigSiblingPath(
+                this.configPath,
+                `tmp-${process.pid}-${Date.now()}`,
+            );
+            const backupConfigPath = createGostConfigSiblingPath(this.configPath, 'known-good');
             const limiterSnapshot = await this.snapshotLimiterFiles();
             const hadConfig = await this.fileExists(this.configPath);
 
@@ -453,7 +462,10 @@ export class GostForwardManager implements OnApplicationBootstrap, OnModuleDestr
     private async restoreConfig(hadConfig: boolean, backupPath: string): Promise<void> {
         await rm(this.configPath, { force: true }).catch(() => void 0);
         if (hadConfig && (await this.fileExists(backupPath))) {
-            const restorePath = `${this.configPath}.restore-${process.pid}-${Date.now()}`;
+            const restorePath = createGostConfigSiblingPath(
+                this.configPath,
+                `restore-${process.pid}-${Date.now()}`,
+            );
             await copyFile(backupPath, restorePath);
             await rename(restorePath, this.configPath);
         }
