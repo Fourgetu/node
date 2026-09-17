@@ -1,0 +1,16 @@
+name: Make Custom Node Package Public
+
+on:
+  workflow_dispatch:
+
+permissions:
+  packages: write
+
+jobs:
+  make-public:
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Set GHCR package visibility
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: gh api --method PATCH /user/packages/container/remnawave-node -f visibility=public
