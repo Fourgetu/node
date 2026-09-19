@@ -8,7 +8,7 @@ on:
   workflow_dispatch:
 
 env:
-  REGISTRY_IMAGE: remnawave/node
+  REGISTRY_IMAGE: fourgetu/remnawave-node
   IMAGE_TAG: dev
 
 jobs:

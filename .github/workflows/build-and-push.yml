@@ -84,7 +84,7 @@ jobs:
           docker buildx bake "${{ matrix.variant }}" \
             --set "*.platform=${{ matrix.platform }}" \
             --set "*.tags=" \
-            --set '*.output=type=image,"name=remnawave/node,ghcr.io/remnawave/node",push-by-digest=true,name-canonical=true,push=true' \
+            --set '*.output=type=image,"name=fourgetu/remnawave-node,ghcr.io/fourgetu/remnawave-node",push-by-digest=true,name-canonical=true,push=true' \
             --metadata-file "${{ runner.temp }}/metadata.json"
 
       - name: Export digest
@@ -146,7 +146,7 @@ jobs:
               | jq -r --arg reg "$2:" '.target[].tags[] | select(startswith($reg))'
           }
 
-          for registry in remnawave/node ghcr.io/remnawave/node; do
+          for registry in fourgetu/remnawave-node ghcr.io/fourgetu/remnawave-node; do
             tags=$( { resolve latest "$registry"; resolve "${{ github.ref_name }}" "$registry"; } \
               | sed 's/^/-t /' | tr '\n' ' ')
 
@@ -185,12 +185,12 @@ jobs:
             📝 Compare changes: [${{ steps.tag.outputs.previousTag }}...${{ steps.tag.outputs.latestTag }}](https://github.com/${{ github.repository }}/compare/${{ steps.tag.outputs.previousTag }}...${{ steps.tag.outputs.latestTag }})
 
             Latest Docker image:
-            - `remnawave/node:latest`
-            - `ghcr.io/remnawave/node:latest`
+            - `fourgetu/remnawave-node:latest`
+            - `ghcr.io/fourgetu/remnawave-node:latest`
 
             Docker images:
-            - `remnawave/node:${{github.ref_name}}`
-            - `ghcr.io/remnawave/node:${{github.ref_name}}`
+            - `fourgetu/remnawave-node:${{github.ref_name}}`
+            - `ghcr.io/fourgetu/remnawave-node:${{github.ref_name}}`
 
   send-telegram-message:
     name: Send Telegram message
