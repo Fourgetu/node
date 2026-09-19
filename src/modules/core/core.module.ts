@@ -1,6 +1,7 @@
 import { Global, Module, OnModuleDestroy } from '@nestjs/common';
 import { CqrsModule } from '@nestjs/cqrs';
 
+import { CertificateService } from '../certificates/certificate.service';
 import { CoreStateService } from './core-state.service';
 import { CoreController } from './core.controller';
 import { SingBoxProcessService } from './singbox-process.service';
@@ -17,9 +18,16 @@ import { XrayStatsService } from './xray-stats.service';
         SingBoxStatsService,
         XrayStatsService,
         SingBoxService,
+        CertificateService,
     ],
     controllers: [CoreController],
-    exports: [CoreStateService, SingBoxService, SingBoxStatsService, XrayStatsService],
+    exports: [
+        CoreStateService,
+        SingBoxService,
+        SingBoxStatsService,
+        XrayStatsService,
+        CertificateService,
+    ],
 })
 export class CoreModule implements OnModuleDestroy {
     constructor(private readonly singBoxService: SingBoxService) {}

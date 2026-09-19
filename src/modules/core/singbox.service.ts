@@ -14,6 +14,12 @@ import { getSystemInfo, getSystemStats } from '@common/utils/get-system-stats';
 import { StartXrayCommand } from '@libs/contracts/commands';
 import { CORE_TYPE } from '@libs/contracts/constants';
 
+import {
+    CertificateService,
+    isManagedCertificatePair,
+    PANEL_CERTIFICATE_URI,
+    PANEL_PRIVATE_KEY_URI,
+} from '../certificates/certificate.service';
 import { GetInterfaceStatsQuery } from '../network-stats/queries/get-interface-stats/get-interface-stats.query';
 import { StartXrayResponseModel, StopXrayResponseModel } from '../xray-core/models';
 import { CoreStateService } from './core-state.service';
@@ -56,6 +62,7 @@ export class SingBoxService {
     private currentConfig: ISingBoxConfig | null = null;
     private emptyConfigHash: string | null = null;
     private inboundHashes = new Map<string, string>();
+    private certificateHashes = new Map<string, string>();
     private mutationChain: Promise<void> = Promise.resolve();
     private readonly nodeVersion = __RWNODE_VERSION__ ?? '0.0.0';
 
@@ -64,6 +71,7 @@ export class SingBoxService {
         private readonly statsService: SingBoxStatsService,
         private readonly coreState: CoreStateService,
         private readonly queryBus: QueryBus,
+        private readonly certificateService: CertificateService,
     ) {
         this.version = this.getVersionFromEnv();
     }
@@ -91,13 +99,17 @@ export class SingBoxService {
         this.isStartProcessing = true;
 
         try {
+            const certificateResult = await this.ensureRequiredCertificates(
+                body.xrayConfig,
+                body.internals.certificates ?? [],
+            );
             if (
                 this.coreState.isOnline(CORE_TYPE.SINGBOX) &&
                 !this.disableHashedSetCheck &&
                 !body.internals.forceRestart
             ) {
                 await this.statsService.getSysStats();
-                if (!this.isRestartRequired(body.internals.hashes)) {
+                if (!certificateResult.changed && !this.isRestartRequired(body.internals.hashes)) {
                     return ok(
                         new StartXrayResponseModel(
                             true,
@@ -111,7 +123,7 @@ export class SingBoxService {
                 }
             }
 
-            const fullConfig = this.injectManagementApi(body.xrayConfig);
+            const fullConfig = this.injectManagementApi(certificateResult.config);
 
             if (this.coreState.isOnline(CORE_TYPE.SINGBOX)) {
                 await this.statsService.accumulateAndReset();
@@ -119,6 +131,7 @@ export class SingBoxService {
 
             await this.activateConfig(fullConfig);
             this.rememberHashes(body.internals.hashes);
+            this.rememberCertificateHashes(certificateResult.hashes);
             this.currentConfig = fullConfig;
             this.version = await this.resolveVersion();
             this.coreState.setOnline(CORE_TYPE.SINGBOX, this.version);
@@ -179,6 +192,7 @@ export class SingBoxService {
             this.currentConfig = null;
             this.emptyConfigHash = null;
             this.inboundHashes.clear();
+            this.certificateHashes.clear();
 
             return ok(new StopXrayResponseModel(true));
         } catch (error) {
@@ -285,6 +299,49 @@ export class SingBoxService {
     private rememberHashes(hashes: StartXrayCommand.Request['internals']['hashes']): void {
         this.emptyConfigHash = hashes.emptyConfig;
         this.inboundHashes = new Map(hashes.inbounds.map((inbound) => [inbound.tag, inbound.hash]));
+    }
+
+    private rememberCertificateHashes(hashes: Map<string, string>): void {
+        this.certificateHashes = new Map(hashes);
+    }
+
+    private async ensureRequiredCertificates(
+        config: Record<string, unknown>,
+        bundles: NonNullable<StartXrayCommand.Request['internals']['certificates']>,
+    ): Promise<{ changed: boolean; config: Record<string, unknown>; hashes: Map<string, string> }> {
+        const cloned = structuredClone(config) as ISingBoxConfig;
+        const bundlesById = new Map(bundles.map((bundle) => [bundle.id, bundle]));
+        const hashes = new Map<string, string>();
+        let changed = false;
+
+        for (const candidate of cloned.inbounds ?? []) {
+            const tls = candidate.tls;
+            if (!tls || typeof tls !== 'object' || Array.isArray(tls)) continue;
+            const tlsRecord = tls as Record<string, unknown>;
+            if (!isManagedCertificatePair(tlsRecord.certificate_path, tlsRecord.key_path)) {
+                if (
+                    tlsRecord.certificate_path === PANEL_CERTIFICATE_URI ||
+                    tlsRecord.key_path === PANEL_PRIVATE_KEY_URI
+                ) {
+                    throw new Error('Managed TLS certificate markers are incomplete.');
+                }
+                continue;
+            }
+
+            const bundle = bundlesById.get('panel');
+            if (!bundle)
+                throw new Error('Panel TLS certificate was not synchronized to this Node.');
+            const installed = await this.certificateService.ensureInstalled(bundle);
+            tlsRecord.certificate_path = installed.certificatePath;
+            tlsRecord.key_path = installed.keyPath;
+            hashes.set(bundle.id, bundle.hash);
+            changed =
+                changed ||
+                installed.changed ||
+                this.certificateHashes.get(bundle.id) !== bundle.hash;
+        }
+
+        return { changed, config: cloned, hashes };
     }
 
     private injectManagementApi(config: Record<string, unknown>): ISingBoxConfig {
