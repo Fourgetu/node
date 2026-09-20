@@ -192,14 +192,17 @@ export class GostForwardManager implements OnApplicationBootstrap, OnModuleDestr
 
     private buildConfig(forwards: GostForward[]): GostConfig {
         return {
-            limiters: forwards.map((forward) => {
-                const name = this.limiterName(forward.id);
-                return {
-                    name,
-                    reload: '5s',
-                    file: { path: this.limiterPath(forward.id) },
-                };
-            }),
+            // TCP+UDP services belonging to one User Route share a single limiter.
+            limiters: [...new Map(forwards.map((forward) => [forward.id, forward])).values()].map(
+                (forward) => {
+                    const name = this.limiterName(forward.id);
+                    return {
+                        name,
+                        reload: '5s',
+                        file: { path: this.limiterPath(forward.id) },
+                    };
+                },
+            ),
             services: forwards.map((forward) => {
                 const limiter = this.limiterName(forward.id);
                 const name = `${limiter}-${forward.network}`;
@@ -424,7 +427,9 @@ export class GostForwardManager implements OnApplicationBootstrap, OnModuleDestr
         await mkdir(this.limiterDirectory, { recursive: true, mode: 0o700 });
         const desired = new Set<string>();
 
-        for (const forward of forwards.filter((item) => item.enabled)) {
+        for (const forward of new Map(
+            forwards.filter((item) => item.enabled).map((forward) => [forward.id, forward]),
+        ).values()) {
             const path = this.limiterPath(forward.id);
             desired.add(path);
             const temp = `${path}.tmp-${process.pid}-${Date.now()}`;

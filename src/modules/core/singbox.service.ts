@@ -132,7 +132,9 @@ export class SingBoxService {
             await this.activateConfig(fullConfig);
             this.rememberHashes(body.internals.hashes);
             this.rememberCertificateHashes(certificateResult.hashes);
-            this.currentConfig = fullConfig;
+            // Retain managed templates even when a zero-user listener is
+            // omitted from runtime so a later user mutation can restore it.
+            this.currentConfig = certificateResult.config as ISingBoxConfig;
             this.version = await this.resolveVersion();
             this.coreState.setOnline(CORE_TYPE.SINGBOX, this.version);
 
@@ -279,7 +281,7 @@ export class SingBoxService {
             mutate(nextConfig.inbounds ?? []);
             const managedConfig = this.injectManagementApi(nextConfig);
             await this.activateConfig(managedConfig);
-            this.currentConfig = managedConfig;
+            this.currentConfig = nextConfig;
         };
 
         const operation = this.mutationChain.then(execute, execute);
@@ -346,7 +348,15 @@ export class SingBoxService {
 
     private injectManagementApi(config: Record<string, unknown>): ISingBoxConfig {
         const cloned = structuredClone(config) as ISingBoxConfig;
-        const inbounds = cloned.inbounds ?? [];
+        const inbounds = (cloned.inbounds ?? []).filter(
+            (inbound) =>
+                !(
+                    inbound.type === 'shadowsocks' &&
+                    Array.isArray(inbound.users) &&
+                    inbound.users.length === 0
+                ),
+        );
+        cloned.inbounds = inbounds;
         const outbounds = cloned.outbounds ?? [];
         const users = new Set<string>();
 
