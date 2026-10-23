@@ -4,6 +4,7 @@ on:
   push:
     tags:
       - '*'
+      - '!custom-*'
 
 jobs:
   send-start-deploy-telegram-message:
